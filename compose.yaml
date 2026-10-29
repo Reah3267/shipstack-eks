@@ -1,0 +1,31 @@
+services:
+  tasks:
+    build: ./services/tasks
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  summary:
+    build: ./services/summary
+    environment:
+      TASKS_URL: http://tasks:8000
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      tasks: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8001/healthz')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  frontend:
+    build: ./services/frontend
+    ports: ["127.0.0.1:8080:8080"]
+    depends_on:
+      tasks: {condition: service_healthy}
+      summary: {condition: service_healthy}

@@ -1,0 +1,78 @@
+name: Build and deploy to EKS
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: launchpad-production
+  cancel-in-progress: false
+jobs:
+  release:
+    if: vars.AWS_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
+      IMAGE_TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test before obtaining AWS access
+        run: |
+          python -m unittest discover -s tests -v
+          docker compose config --quiet
+          docker compose up --build -d --wait
+          python scripts/smoke.py http://localhost:8080
+          docker compose down
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: login
+      - name: Build and push commit-tagged images
+        env:
+          ECR_REGISTRY: ${{ steps.login.outputs.registry }}
+        run: |
+          for service in tasks summary frontend; do
+            image="$ECR_REGISTRY/launchpad-$service:$IMAGE_TAG"
+            docker build -t "$image" "services/$service"
+            # Allow a manual retry of the same commit with immutable ECR tags.
+            if ! aws ecr describe-images --repository-name "launchpad-$service" --image-ids "imageTag=$IMAGE_TAG" >/dev/null 2>&1; then
+              docker push "$image"
+            fi
+          done
+      - name: Install matching kubectl
+        run: |
+          version=$(aws eks describe-cluster --name "$EKS_CLUSTER_NAME" --query 'cluster.version' --output text)
+          patch=$(curl -fsSL "https://dl.k8s.io/release/stable-$version.txt")
+          curl -fsSLO "https://dl.k8s.io/release/$patch/bin/linux/amd64/kubectl"
+          curl -fsSLO "https://dl.k8s.io/release/$patch/bin/linux/amd64/kubectl.sha256"
+          echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check
+          sudo install -m 0755 kubectl /usr/local/bin/kubectl
+      - name: Deploy and wait for healthy pods
+        env:
+          ECR_REGISTRY: ${{ steps.login.outputs.registry }}
+        run: bash scripts/deploy.sh
+      - name: Smoke test deployed services
+        run: |
+          kubectl -n launchpad port-forward svc/frontend 8080:8080 >/tmp/port-forward.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" || true' EXIT
+          python scripts/smoke.py http://localhost:8080
+      - name: Diagnostics
+        if: failure()
+        run: |
+          kubectl -n launchpad get pods || true
+          kubectl -n launchpad get events --sort-by=.lastTimestamp || true
+          for service in tasks summary frontend; do
+            kubectl -n launchpad logs deployment/$service --tail=60 || true
+          done

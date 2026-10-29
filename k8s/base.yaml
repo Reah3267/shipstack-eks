@@ -1,0 +1,229 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: launchpad
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tasks
+  namespace: launchpad
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: tasks
+  template:
+    metadata:
+      labels:
+        app: tasks
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: tasks
+        image: launchpad-tasks:local
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 250m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          initialDelaySeconds: 3
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tasks
+  namespace: launchpad
+spec:
+  selector:
+    app: tasks
+  ports:
+  - port: 8000
+    targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: summary
+  namespace: launchpad
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: summary
+  template:
+    metadata:
+      labels:
+        app: summary
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: summary
+        image: launchpad-summary:local
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8001
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 250m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8001
+          initialDelaySeconds: 3
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8001
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        env:
+        - name: TASKS_URL
+          value: http://tasks:8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: summary
+  namespace: launchpad
+spec:
+  selector:
+    app: summary
+  ports:
+  - port: 8001
+    targetPort: 8001
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: launchpad
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: frontend
+        image: launchpad-frontend:local
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 250m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 3
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: launchpad
+spec:
+  selector:
+    app: frontend
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP

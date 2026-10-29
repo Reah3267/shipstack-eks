@@ -1,0 +1,7 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ShipStack · EKS Task Tracker</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body><main><header><span class="logo">L /</span><span>SHIPSTACK</span><span class="badge">MICROSERVICES LAB</span></header>
+<section class="intro"><p class="eyebrow">BUILD. SHIP. REPEAT.</p><h1>Small tasks.<br>Big deployments.</h1><p>A working microservices demo built for your DevOps journey.</p></section>
+<section class="stats" aria-label="Task summary"><article><span>Total tasks</span><strong id="total">—</strong></article><article><span>Completed</span><strong id="completed">—</strong></article><article><span>In progress</span><strong id="pending">—</strong></article></section>
+<section class="board"><div class="board-title"><h2>Your deployment checklist</h2><button id="refresh" type="button">Refresh ↻</button></div><form id="task-form"><label class="sr-only" for="title">Task title</label><input id="title" maxlength="120" required placeholder="What are you shipping next?" autocomplete="off"><button type="submit">Add task +</button></form><p id="status" role="status" aria-live="polite"></p><ul id="tasks"></ul></section>
+<footer><span>NGINX → Task API + Summary API</span><span>Demo storage resets when the task service restarts.</span></footer></main></body></html>

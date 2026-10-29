@@ -1,0 +1,6 @@
+region             = "ap-south-1"
+cluster_name       = "launchpad-eks"
+kubernetes_version = "1.35"
+github_repository  = "Reah3267/shipstack-eks"
+# If your account already has this OIDC provider, reuse its ARN:
+# github_oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
